@@ -1,59 +1,45 @@
-import { Image, StyleSheet, Platform } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { Image, StyleSheet, Platform, View, Text, Button } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useColorScheme } from "@/hooks/useColorScheme";
+import React, { useState, useEffect } from "react";
 
 export default function HomeScreen() {
+  const colorScheme = useColorScheme();
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Uygulamanın yüklendiğini simüle etmek için bir setTimeout kullanabilirsiniz
+    setTimeout(() => setLoading(false), 3000); // 3 saniye sonra yüklemeyi bitir
+  }, []);
+
+  if (loading) {
+    // Yükleme ekranını göster
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text style={colorScheme == "light" ? lightStyle.text : darkStyle.text}>
+          「 Vision Detect 」
+        </Text>
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({ ios: 'cmd + d', android: 'cmd + m' })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <SafeAreaView
+      style={
+        colorScheme == "light" ? lightStyle.container : darkStyle.container
+      }
+    >
+      <Button title="Galeri"></Button>
+      <Button title="Kamera"></Button>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   stepContainer: {
@@ -65,6 +51,51 @@ const styles = StyleSheet.create({
     width: 290,
     bottom: 0,
     left: 0,
-    position: 'absolute',
+    position: "absolute",
+  },
+});
+
+const lightStyle = StyleSheet.create({
+  container: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    flexGrow: 2,
+    backgroundColor: "#f0fcfc",
+    gap: 24,
+  },
+  text: {
+    fontSize: 32,
+    color: "#424242",
+    textAlign: "center",
+    fontWeight: "800",
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  button: {
+    color: "red",
+  },
+});
+const darkStyle = StyleSheet.create({
+  container: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    flexGrow: 2,
+    backgroundColor: "#424242",
+    gap: 24,
+  },
+  text: {
+    fontSize: 48,
+    color: "#f0fcfc",
+    textAlign: "center",
+    fontWeight: "800",
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  button: {
+    color: "red",
   },
 });
