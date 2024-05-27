@@ -1,28 +1,58 @@
-import {
-  Linking,
-  TouchableOpacity,
-  Alert,
-  Image,
-  StyleSheet,
-  Platform,
-  View,
-  Text,
-  Button,
-} from "react-native";
+
+import {Linking,TouchableOpacity,Alert,Image,StyleSheet,Platform,View,Text,Button} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import React, { useState, useEffect } from "react";
 import * as ImagePicker from "expo-image-picker";
-//import * as Permissions from 'expo-permissions';
+import * as ImageManipulator from "expo-image-manipulator";
+import ImageResizer from 'react-native-image-resizer';
+import * as tf from '@tensorflow/tfjs';
+import '@tensorflow/tfjs-react-native';
+import { asyncStorageIO, bundleResourceIO } from "@tensorflow/tfjs-react-native";
+import * as FileSystem from 'expo-file-system';
+
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
-  const [image, setImage] = useState<string | null>(null);
+  const [image, setImage] = useState<string| null>(null);
   const [loading, setLoading] = useState(true);
+  const [model, setModel] = useState<tf.GraphModel  | tf.LayersModel | null>(null);
+  const [prediction, setPrediction] = useState<string | null>(null);
+
+  // useEffect(() => {
+  //   tf.ready().then(async () => {
+  //     setLoading(false);
+  //   });
+  // })
 
   useEffect(() => {
+    tf.ready().then(async () => {
+      setLoading(false);
+    }).catch(error => console.error("Error initializing TensorFlow:", error));
+  }, []);
+  
+  useEffect(() => {
+    if (!loading) {
+      loadModel()
+    }
+  }, [loading])
+
+/*   useEffect(() => {
     // Uygulamanın yüklendiğini simüle etmek için bir setTimeout kullanabilirsiniz
     setTimeout(() => setLoading(false), 3000); // 3 saniye sonra yüklemeyi bitir
-  }, []);
+  }, []); */
+  const loadModel = async () => {
+    try {
+      const modelJson = require("../../assets/model/model.json");
+      const modelWeights = require("../../assets/model/group1-shard1of1.bin");
+      const modelIo = bundleResourceIO(modelJson, modelWeights)
+      const loadedModel = await tf.loadLayersModel(modelIo);
+      //console.log(loadedModel);
+      setModel(loadedModel);
+      console.log("[+] Model Loaded")
+    } catch (error) {
+      console.error('Error loading model:', error); 
+    }
+  };
 
   const checkPermissions = async (): Promise<boolean> => {
     const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
@@ -53,6 +83,7 @@ export default function HomeScreen() {
     });
     if (!response.canceled && response.assets && response.assets.length > 0) {
       setImage(response.assets[0].uri);
+      classifyImage(response.assets[0].uri);
     }
   };
 
@@ -85,8 +116,87 @@ export default function HomeScreen() {
     });
     if (!response.canceled && response.assets && response.assets.length > 0) {
       setImage(response.assets[0].uri);
+      classifyImage(response.assets[0].uri);
     }
-  };
+  };  
+
+// const classifyImage = async (uri: string) => {
+//   try {
+//     if (!model) {
+//       throw new Error("Model is not loaded");
+//     }
+
+//     // Manipulate the image
+//     const manipulatedImage = await ImageManipulator.manipulateAsync(
+//       uri,
+//       [{ resize: { width: 32, height: 32 } }],
+//       { base64: true } // Ensure the format is JPEG
+//     );
+
+//     // Log the dimensions of the manipulated image
+//     console.log("Manipulated Image Dimensions:", manipulatedImage.width, "x", manipulatedImage.height);
+    
+//     const base64Data = await FileSystem.readAsStringAsync(manipulatedImage.uri, { encoding: FileSystem.EncodingType.Base64 });
+//     if (!base64Data) {
+//       throw new Error("Base64 data not available");
+//     }
+//     const imgBuffer = Buffer.from(base64Data, "base64");
+//      const raw = new Uint8Array(imgBuffer);
+
+//      const image = tf.tensor3d(raw, [32, 32, 3], 'int32');    
+//      const deneme = "../../assets/images/kedi.jpg"
+     
+//     // Make predictions using the model
+//     // const prediction = model.predict(image.expandDims(0)) as tf.Tensor;
+//     const prediction = model.predict(deneme.resize(32,32,3))
+//     // console.log(image.expandDims(0))
+//     const predictedIndex = prediction.argMax(-1).dataSync()[0];
+//     const labels = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"];
+//     setPrediction(labels[predictedIndex]);
+//   } catch (error) {
+//     console.error("Error classifying image:", error);
+//   }
+// };
+
+const classifyImage = async (uri: string) => {
+  try {
+    if (!model) {
+      throw new Error("Model is not loaded");
+    }
+
+    // Manipulate the image
+    const manipulatedImage = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 32, height: 32 } }],
+      { base64: true }
+    );
+
+    // Log the dimensions of the manipulated image
+    console.log("Manipulated Image Dimensions:", manipulatedImage.width, "x", manipulatedImage.height);
+
+    const base64Data = await FileSystem.readAsStringAsync(manipulatedImage.uri, { encoding: FileSystem.EncodingType.Base64 });
+    if (!base64Data) {
+      throw new Error("Base64 data not available");
+    }
+    const deneme = require("../../assets/images/kedi.JPG");
+    console.log(deneme)
+    const imgBuffer = Buffer.from(base64Data, "base64");
+    const raw = new Uint8Array(imgBuffer);
+
+    // Convert the raw data to a tensor and resize
+    let imageTensor = tf.tensor3d(raw, [32, 32, 3], 'int32');
+    imageTensor = tf.image.resizeBilinear(imageTensor, [32, 32]);
+
+    // Make predictions using the model
+    const prediction = model.predict(imageTensor.expandDims(0)) as tf.Tensor;
+    const predictedIndex = prediction.argMax(-1).dataSync()[0];
+    const labels = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"];
+    setPrediction(labels[predictedIndex]);
+  } catch (error) {
+    console.error("Error classifying image:", error);
+  }
+};
+
 
   if (loading) {
     // Yükleme ekranını göster
@@ -98,7 +208,7 @@ export default function HomeScreen() {
       </View>
     );
   }
-
+    
   return (
     <SafeAreaView
       style={
@@ -108,8 +218,14 @@ export default function HomeScreen() {
       <Text style={colorScheme == "light" ? lightStyle.title : darkStyle.title}>
         「 Vision Detect 」
       </Text>
-      <Image style={styles.imageStyle} source={{ uri: image || "" }} />
-      <Text>{`Nesne:`}</Text>
+      {image && <Image style={styles.imageStyle} source={{ uri: image }} />}
+      {prediction && (
+        <Text style={colorScheme === "light" ? lightStyle.text : darkStyle.text}>
+          {`Nesne: ${prediction}`}
+        </Text>
+      )}
+      {/* <Image style={styles.imageStyle} source={{ uri: image || "" }} />
+      <Text>{`Nesne:`}</Text> */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={
