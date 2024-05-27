@@ -1,3 +1,4 @@
+
 import {Linking,TouchableOpacity,Alert,Image,StyleSheet,Platform,View,Text,Button} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -207,7 +208,7 @@ const classifyImage = async (uri: string) => {
       </View>
     );
   }
-
+    
   return (
     <SafeAreaView
       style={
