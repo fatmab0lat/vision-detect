@@ -10,13 +10,14 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-react-native';
 import { asyncStorageIO, bundleResourceIO } from "@tensorflow/tfjs-react-native";
 import * as FileSystem from 'expo-file-system';
-
+import { decodeJpeg } from '@tensorflow/tfjs-react-native';
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
-  const [image, setImage] = useState<string| null>(null);
+  //const [image, setImage] = useState<string| null>(null);
   const [loading, setLoading] = useState(true);
   const [model, setModel] = useState<tf.GraphModel  | tf.LayersModel | null>(null);
   const [prediction, setPrediction] = useState<string | null>(null);
+  const [image, setImage] = useState<{ assets: ImagePicker.ImagePickerAsset[] } | null>(null);
 
   // useEffect(() => {
   //   tf.ready().then(async () => {
@@ -49,9 +50,11 @@ export default function HomeScreen() {
       //console.log(loadedModel);
       setModel(loadedModel);
       console.log("[+] Model Loaded")
+      
     } catch (error) {
       console.error('Error loading model:', error); 
     }
+    
   };
 
   const checkPermissions = async (): Promise<boolean> => {
@@ -62,6 +65,21 @@ export default function HomeScreen() {
       return newStatus === "granted";
     }
     return true;
+  };
+
+  const resizeImage = async (uri: string, width: number, height: number): Promise<string | null> => {
+    try {
+      const response = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width, height } }],
+        { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      console.log(`${response.height} x ${response.width} img`);
+      return response.uri;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
   };
 
   const chooseFile = async () => {
@@ -80,12 +98,25 @@ export default function HomeScreen() {
 
     const response = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, // Optional: allows the user to edit the selected image
+      aspect: [4, 3], // Optional: aspect ratio for the edited image
+      quality: 1,
     });
+  
     if (!response.canceled && response.assets && response.assets.length > 0) {
-      setImage(response.assets[0].uri);
-      classifyImage(response.assets[0].uri);
-    }
+      const resizedUri = await resizeImage(response.assets[0].uri, 320, 320);
+      if (resizedUri) {
+        console.log(resizedUri);
+        setImage({ assets: [{ uri: resizedUri, width: 0, height: 0 }] });
+        // Optionally classify image
+        classifyImage(resizedUri);
+      }
+    } else if (response.canceled) {
+      console.log('User cancelled image picker');
+    } 
   };
+
+  
 
   const checkCameraPermissions = async (): Promise<boolean> => {
     const { status } = await ImagePicker.getCameraPermissionsAsync();
@@ -113,91 +144,58 @@ export default function HomeScreen() {
 
     const response = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, // Optional: allows the user to edit the selected image
+      aspect: [4, 3], // Optional: aspect ratio for the edited image
+      quality: 1,
     });
+ 
     if (!response.canceled && response.assets && response.assets.length > 0) {
-      setImage(response.assets[0].uri);
-      classifyImage(response.assets[0].uri);
-    }
+      const resizedUri = await resizeImage(response.assets[0].uri, 320, 320);
+      if (resizedUri) {
+        console.log(resizedUri);
+        setImage({ assets: [{ uri: resizedUri, width: 0, height: 0 }] });
+        // Optionally classify image
+        classifyImage(resizedUri);
+      }
+    } else if (response.canceled) {
+      console.log('User cancelled image picker');
+    } 
   };  
 
-// const classifyImage = async (uri: string) => {
-//   try {
-//     if (!model) {
-//       throw new Error("Model is not loaded");
-//     }
 
-//     // Manipulate the image
-//     const manipulatedImage = await ImageManipulator.manipulateAsync(
-//       uri,
-//       [{ resize: { width: 32, height: 32 } }],
-//       { base64: true } // Ensure the format is JPEG
-//     );
-
-//     // Log the dimensions of the manipulated image
-//     console.log("Manipulated Image Dimensions:", manipulatedImage.width, "x", manipulatedImage.height);
-    
-//     const base64Data = await FileSystem.readAsStringAsync(manipulatedImage.uri, { encoding: FileSystem.EncodingType.Base64 });
-//     if (!base64Data) {
-//       throw new Error("Base64 data not available");
-//     }
-//     const imgBuffer = Buffer.from(base64Data, "base64");
-//      const raw = new Uint8Array(imgBuffer);
-
-//      const image = tf.tensor3d(raw, [32, 32, 3], 'int32');    
-//      const deneme = "../../assets/images/kedi.jpg"
-     
-//     // Make predictions using the model
-//     // const prediction = model.predict(image.expandDims(0)) as tf.Tensor;
-//     const prediction = model.predict(deneme.resize(32,32,3))
-//     // console.log(image.expandDims(0))
-//     const predictedIndex = prediction.argMax(-1).dataSync()[0];
-//     const labels = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"];
-//     setPrediction(labels[predictedIndex]);
-//   } catch (error) {
-//     console.error("Error classifying image:", error);
-//   }
-// };
-
-const classifyImage = async (uri: string) => {
-  try {
-    if (!model) {
-      throw new Error("Model is not loaded");
+  const classifyImage = async (uri: string) => {
+    try {
+      if (!model) {
+        throw new Error("Model is not loaded");
+      }
+  
+      // Resize the image using ImageManipulator
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 32, height: 32 } }],
+        { format: ImageManipulator.SaveFormat.JPEG }
+      );
+  
+      const response = await fetch(manipResult.uri);
+      const imageData = await response.arrayBuffer();
+      const imageTensor = decodeJpeg(new Uint8Array(imageData));
+  
+      // Normalize the image tensor
+      const normalizedImageTensor = imageTensor.div(255.0);
+  
+      // Expand dimensions to match model input shape [1, 32, 32, 3]
+      const inputTensor = normalizedImageTensor.expandDims(0);
+  
+      // Make predictions using the model
+      const prediction = model.predict(inputTensor) as tf.Tensor;
+      const predictedIndex = prediction.argMax(-1).dataSync()[0];
+      const labels = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"];
+      setPrediction(labels[predictedIndex]);
+    } catch (error) {
+      console.error("Error classifying image:", error);
     }
-
-    // Manipulate the image
-    const manipulatedImage = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 32, height: 32 } }],
-      { base64: true }
-    );
-
-    // Log the dimensions of the manipulated image
-    console.log("Manipulated Image Dimensions:", manipulatedImage.width, "x", manipulatedImage.height);
-
-    const base64Data = await FileSystem.readAsStringAsync(manipulatedImage.uri, { encoding: FileSystem.EncodingType.Base64 });
-    if (!base64Data) {
-      throw new Error("Base64 data not available");
-    }
-    const deneme = require("../../assets/images/kedi.JPG");
-    console.log(deneme)
-    const imgBuffer = Buffer.from(base64Data, "base64");
-    const raw = new Uint8Array(imgBuffer);
-
-    // Convert the raw data to a tensor and resize
-    let imageTensor = tf.tensor3d(raw, [32, 32, 3], 'int32');
-    imageTensor = tf.image.resizeBilinear(imageTensor, [32, 32]);
-
-    // Make predictions using the model
-    const prediction = model.predict(imageTensor.expandDims(0)) as tf.Tensor;
-    const predictedIndex = prediction.argMax(-1).dataSync()[0];
-    const labels = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"];
-    setPrediction(labels[predictedIndex]);
-  } catch (error) {
-    console.error("Error classifying image:", error);
-  }
-};
-
-
+  };
+  
   if (loading) {
     // Yükleme ekranını göster
     return (
@@ -218,10 +216,10 @@ const classifyImage = async (uri: string) => {
       <Text style={colorScheme == "light" ? lightStyle.title : darkStyle.title}>
         「 Vision Detect 」
       </Text>
-      {image && <Image style={styles.imageStyle} source={{ uri: image }} />}
+      {image && <Image style={styles.imageStyle} source={{ uri: image.assets[0].uri }} />}
       {prediction && (
         <Text style={colorScheme === "light" ? lightStyle.text : darkStyle.text}>
-          {`Nesne: ${prediction}`}
+          {`${prediction}`}
         </Text>
       )}
       {/* <Image style={styles.imageStyle} source={{ uri: image || "" }} />
